@@ -1,9 +1,9 @@
-## @hpi/withings
+## @hpi/taskwarrior
 
 ### Installation
 
 ```bash
-git clone git@github.com:Qnzl-HPI/withings.git
+git clone git@github.com:Qnzl-HPI/taskwarrior.git
 
 # Install node requirements
 npm install
