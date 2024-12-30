@@ -1,8 +1,0 @@
-
-[linting]
-pytest
-mypy
-lxml
-
-[testing]
-pytest

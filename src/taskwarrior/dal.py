@@ -21,6 +21,7 @@ class DAL:
 
     def raw(self):
         for f in sorted(self.sources):
+            print(self.sources)
             with f.open(encoding="utf-8") as fo:
                 yield json.load(fo)
 

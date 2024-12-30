@@ -1,78 +1,82 @@
-#!/usr/bin/node env
+#!/usr/bin/env node
 
-const { URLSearchParams } = require('url')
+/**
+ * CLI to dump all local Taskwarrior tasks to a file as JSON.
+ */
+
 const { promisify } = require('util')
-const fetch = require('node-fetch')
 const { Command } = require('commander')
 const fs = require('fs')
 const dayjs = require('dayjs')
 const { resolve } = require('path')
-const server = require('server')
+const { exec } = require('child_process')
 
 const program = new Command()
 
-const { get } = server.router
-const { send, status } = server.reply
-
-
+// Handle fatal errors
 process.on('unhandledRejection', onfatal)
 process.on('uncaughtException', onfatal)
 
+/**
+ * Log fatal error and exit
+ * @param {Error} err
+ */
 function onfatal(err) {
-  console.log('fatal:', err.message)
+  console.error('fatal:', err.message)
   exit(1)
 }
 
+/**
+ * Exit the process
+ * @param {number} code
+ */
 function exit(code) {
-  process.nextTick(process.exit, code)
+  process.nextTick(() => process.exit(code))
 }
 
+// CLI definition
 program
   .command('dump')
-  .description('Dump to file')
-  .option('-k, --apiKey [apiKey]', 'OAuth access token')
+  .description('Dump all local Taskwarrior tasks to a file')
   .option('--export-format <format>', 'Export file format', '{date}-taskwarrior.json')
-  .option('--export-path [path]', 'Export file path')
+  .option('--export-path <path>', 'Export file path', '.')
   .action(dump)
 
 program.parseAsync(process.argv)
 
-async function dump({
-  apiKey,
-  exportPath,
-  exportFormat
-}) {
-  console.log("APIKEY:", apiKey, exportPath, exportFormat)
-  let tasks
-  let projects
-
-  const filledExportFormat = exportFormat
-    .replace('{date}', dayjs().format('YYYY-MM-DD'))
-
-  const EXPORT_PATH = resolve(exportPath, filledExportFormat)
+/**
+ * Dump local tasks to file
+ * @param {object} options
+ * @param {string} options.exportFormat
+ * @param {string} options.exportPath
+ */
+async function dump({ exportFormat, exportPath }) {
+  const filename = exportFormat.replace('{date}', dayjs().format('YYYY-MM-DD'))
+  const outputPath = resolve(exportPath, filename)
 
   try {
-    const response = await fetch(`https://inthe.am/api/v2/tasks/`, {
-        method: `GET`,
-        headers: {
-          'Authorization': `Token ${apiKey}`
+    const tasks = await new Promise((resolve, reject) => {
+      exec('task export', (err, stdout) => {
+        if (err) return reject(err)
+        try {
+          resolve(JSON.parse(stdout))
+        } catch (parseErr) {
+          reject(parseErr)
         }
       })
+    })
 
-    const { tasks: _tasks } = await response.json()
-
-    projects = _tasks.reduce((arr, task) => {
-      arr.push(task.project)
-
-      return arr
+    const projects = tasks.reduce((acc, task) => {
+      if (task.project) {
+        acc.push(task.project)
+      }
+      return acc
     }, [])
 
-    tasks = _tasks
-  } catch (e) {
-    onfatal(e)
+    const contents = JSON.stringify({ tasks, projects })
+    await promisify(fs.writeFile)(outputPath, contents)
+  } catch (err) {
+    onfatal(err)
   }
-
-  const dump = JSON.stringify({ tasks, projects })
-
-  await promisify(fs.writeFile)(EXPORT_PATH, dump)
 }
+
